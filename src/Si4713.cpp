@@ -319,7 +319,13 @@ void Si4713::setRDSBuffer(const std::string &station,
         
     int sl = station.size();
     if (sl > 64) {
-        sl = 64;
+        // Too long for RadioText: cut at the last space that fits, not mid-word, and drop a
+        // separator left dangling there. With no space in the first 64, cut at 64.
+        size_t sp = station.rfind(' ', 64);
+        sl = (sp == std::string::npos || sp == 0) ? 64 : (int)sp;
+        while (sl > 1 && (station[sl - 1] == ' ' || station[sl - 1] == '-')) {
+            sl--;
+        }
     }
     for (int x = 0; x < sl; x++) {
         buf[x] = station[x];
@@ -357,7 +363,9 @@ void Si4713::setRDSBuffer(const std::string &station,
         }
         bool hasTag = (titlePos >= 0 && titleLen > 0) || (artistPos >= 0 && artistLen > 0);
         if (hasTag) {
-            sendRtPlusInfo(1, titlePos, titleLen, 4, artistPos, artistLen);
+            // A tag ends where the sent text does.
+            sendRtPlusInfo(1, titlePos, std::min(titleLen, sl - titlePos),
+                           4, artistPos, std::min(artistLen, sl - artistPos));
         } else {
             // Text with no track in it (static text, or After Hours just turned off) goes
             // out as a new RT+ item titled with the whole line. An RT+ receiver only moves

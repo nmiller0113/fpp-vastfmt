@@ -74,3 +74,71 @@ inline std::string stationTextAsLine(const std::string &ps) {
     }
     return line;
 }
+
+// RadioText holds at most 64 characters, and Si4713::setRDSBuffer() cuts a longer line at the
+// last space that fits. With a long title that can still cut where the line reads badly:
+// "Harry Belafonte - Day-O (The Banana Boat Song) (Beetlejuice/Soundtrack Version)" would end
+// "...(Beetlejuice/Soundtrack". fitTitleToRoom() shortens the title before the line is built:
+//   1. drop whole trailing "(...)" or "[...]" groups, last first, while the title is too long and
+//      something is left: "Grim Grinning Ghosts (Live) [Instrumental]" becomes
+//      "Grim Grinning Ghosts";
+//   2. if it is still too long, cut at the last space that fits and drop a dangling " -";
+//   3. if no space fits, cut at the limit.
+// With no room at all the title comes back empty; the " - " before it is then dropped by
+// setRDSBuffer()'s cut if the line is still over 64 characters.
+
+inline void trimTrailingSeparators(std::string &s) {
+    while (!s.empty() && (s.back() == ' ' || s.back() == '-')) {
+        s.pop_back();
+    }
+}
+
+// Removes one balanced "(...)" or "[...]" group from the end of s, with the separators before it.
+// Leaves s alone, and returns false, when it does not end in a closed group or when nothing
+// would be left.
+inline bool dropTrailingGroup(std::string &s) {
+    size_t end = s.find_last_not_of(' ');
+    if (end == std::string::npos) {
+        return false;
+    }
+    char close = s[end];
+    char open;
+    if (close == ')') {
+        open = '(';
+    } else if (close == ']') {
+        open = '[';
+    } else {
+        return false;
+    }
+    int depth = 0;
+    for (size_t i = end + 1; i-- > 0;) {
+        if (s[i] == close) {
+            depth++;
+        } else if (s[i] == open && --depth == 0) {
+            std::string rest = s.substr(0, i);
+            trimTrailingSeparators(rest);
+            if (rest.empty()) {
+                return false;
+            }
+            s = rest;
+            return true;
+        }
+    }
+    return false;
+}
+
+inline std::string fitTitleToRoom(const std::string &title, size_t room) {
+    if (title.size() <= room) {
+        return title;
+    }
+    std::string t = title;
+    while (t.size() > room && dropTrailingGroup(t)) {
+    }
+    if (t.size() <= room) {
+        return t;
+    }
+    size_t sp = t.rfind(' ', room);
+    std::string out = (sp != std::string::npos && sp > 0) ? t.substr(0, sp) : t.substr(0, room);
+    trimTrailingSeparators(out);
+    return out.empty() ? t.substr(0, room) : out;
+}

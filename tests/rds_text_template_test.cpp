@@ -1,4 +1,5 @@
-// separatorGap() and stationTextAsLine(), the RDS Text template helpers. Needs nothing from FPP:
+// separatorGap(), stationTextAsLine() and fitTitleToRoom(), the RDS Text template helpers.
+// Needs nothing from FPP:
 //   make -C tests rds_text_template_test && ./tests/rds_text_template_test
 #include "../src/RDSTextTemplate.h"
 
@@ -9,6 +10,11 @@ static int failures = 0;
 static void check(const std::string &got, const std::string &want, const char *what) {
     bool ok = got == want;
     std::printf("%s  %s%s%s\n", ok ? "PASS" : "FAIL", what, ok ? "" : "  got: ", ok ? "" : got.c_str());
+    if (!ok) failures++;
+}
+static void checkFits(const std::string &got, size_t room, const char *what) {
+    bool ok = got.size() <= room;
+    std::printf("%s  %s (%zu <= %zu)\n", ok ? "PASS" : "FAIL", what, got.size(), room);
     if (!ok) failures++;
 }
 int main() {
@@ -38,6 +44,25 @@ int main() {
     check(stationTextAsLine("Lights  "), "Lights", "one block: trimmed");
     check(stationTextAsLine("        "), "", "blank: empty");
     check(stationTextAsLine(""), "", "empty: empty");
+
+    // A long title is shortened before it goes into the line.
+    check(fitTitleToRoom("Day-O (The Banana Boat Song) (Beetlejuice/Soundtrack Version)", 46),
+          "Day-O (The Banana Boat Song)", "trailing group dropped, the rest fits");
+    check(fitTitleToRoom("Grim Grinning Ghosts (From \"The Haunted Mansion\") [Instrumental]", 40),
+          "Grim Grinning Ghosts", "two trailing groups dropped, last first");
+    check(fitTitleToRoom("Silent Night (Live)", 64), "Silent Night (Live)", "fits already, left alone");
+    check(fitTitleToRoom("One Way or Another (Hocus Pocus 2 Version)", 30),
+          "One Way or Another", "a group is dropped only when needed");
+    check(fitTitleToRoom("Halloween Party - Scary Background Sounds: Castle Thunder, Howling Wind", 33),
+          "Halloween Party - Scary", "no group: cut at a word");
+    check(fitTitleToRoom("(Untitled)", 5), "(Unti", "a title that is only a group is cut, not emptied");
+    check(fitTitleToRoom("Song (Remix) [Edit] (Live)", 12), "Song (Remix)", "drops groups until it fits, no further");
+    check(fitTitleToRoom("Supercalifragilisticexpialidocious", 10), "Supercalif", "no space fits: cut at the limit");
+    check(fitTitleToRoom("Unbalanced (paren title", 12), "Unbalanced", "an unclosed group is not a group");
+    check(fitTitleToRoom("Song", 0), "", "no room left: empty title");
+    check(fitTitleToRoom("Rock & Roll - Live", 13), "Rock & Roll", "trailing ' -' trimmed after the cut");
+    checkFits(fitTitleToRoom("A very long title with many words that will not fit anywhere at all", 20), 20,
+              "result never exceeds the room");
 
     std::printf("%s\n", failures ? "FAILED" : "all passed");
     return failures ? 1 : 0;

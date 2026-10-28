@@ -177,8 +177,9 @@ int main() {
     std::string longTitle = utf8ToRDS("A Very Long Song Title That Keeps Going Past The Limit Ok!");
     std::string band = utf8ToRDS("Oldham Brass");
     a = send(longTitle + " - " + band, (int)longTitle.size() + 3, (int)band.size(), 0, (int)longTitle.size());
-    // The artist starts at position 61, so characters 61-63 are all that fit in 64.
-    expect(tag(a, ARTIST) == "Old", "artist tag clipped at character 64", tag(a, ARTIST));
+    // The artist starts at position 61, past the last space that fits, so it is dropped with its
+    // separator rather than cut to its first three characters.
+    expect(a.rt == longTitle && tag(a, ARTIST) == "<none>", "an artist that does not fit is dropped, not cut mid-word", a.rt + " / " + tag(a, ARTIST));
 
     // Switching from a tagged title to static text: the RT+ group must say the item ended
     // (running bit 0, toggle flipped), or an RT+ receiver keeps the last title and artist.
@@ -243,6 +244,25 @@ int main() {
         std::string full(64, 'x');
         s = send(full, -1, 0, -1, 0);
         expect(tag(s, TITLE) == full, "static text of 64: RT+ title covers all 64", tag(s, TITLE));
+    }
+
+    // A line over 64 is cut at a word, and the RT+ tags end where the sent text does.
+    {
+        std::string art = "Harry Belafonte", t = "Day-O (The Banana Boat Song) (Beetlejuice/Soundtrack Version)";
+        OnAir a2 = send(art + " - " + t, 0, (int)art.size(), (int)art.size() + 3, (int)t.size());
+        expect(a2.rt == "Harry Belafonte - Day-O (The Banana Boat Song)", "long line cut at a word", a2.rt);
+        expect(tag(a2, TITLE) == "Day-O (The Banana Boat Song)", "title tag ends where the text does", tag(a2, TITLE));
+        expect(tag(a2, ARTIST) == "Harry Belafonte", "artist tag intact", tag(a2, ARTIST));
+        a2 = send("Ultimate Horror Sounds - Halloween Party - Scary Background Sounds: Castle Thunder", -1, 0, 0, 80);
+        expect(a2.rt == "Ultimate Horror Sounds - Halloween Party - Scary Background", "dangling ' -' dropped", a2.rt);
+        a2 = send(std::string(70, 'x'), -1, 0, 0, 70);
+        expect(a2.rt == std::string(64, 'x'), "no space: cut at 64", a2.rt);
+        expect(tag(a2, TITLE) == std::string(64, 'x'), "tag clipped to 64", tag(a2, TITLE));
+        std::string lt(60, 'y');
+        a2 = send(lt + " - Artist Name Here", 63, 16, 0, 60);
+        expect(a2.rt == lt, "artist past the cut is dropped with the separator", a2.rt);
+        expect(tag(a2, ARTIST) == "<none>", "artist tag past the cut not sent", tag(a2, ARTIST));
+        expect(tag(a2, TITLE) == lt, "title tag intact", tag(a2, TITLE));
     }
 
     std::printf("%s\n", failures ? "FAILED" : "all passed");

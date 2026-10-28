@@ -504,7 +504,7 @@ public:
         }
         const std::string text = utf8ToRDS(textUtf8);
         const std::string artist = utf8ToRDS(artistUtf8);
-        const std::string title = utf8ToRDS(titleUtf8);
+        std::string title = utf8ToRDS(titleUtf8);
         std::string output;
         
         int artistIdx = -1;
@@ -545,6 +545,14 @@ public:
             } else {
                 output += text[x];
             }
+        }
+        if (!station && output.length() > 64 && titleIdx >= 0 && !title.empty()) {
+            // Too long for RadioText: shorten the title where it reads best (RDSTextTemplate.h).
+            size_t room = output.length() - title.length();
+            std::string t = fitTitleToRoom(title, room < 64 ? 64 - room : 0);
+            output.replace(titleIdx, title.length(), t);
+            if (artistIdx > titleIdx) artistIdx -= title.length() - t.length();
+            title = t;
         }
         if (station) {
             LogDebug(VB_PLUGIN, "Setting RDS Station text to \"%s\"\n", output.c_str());
